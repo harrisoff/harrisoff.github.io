@@ -423,22 +423,16 @@ Would you like to delete the cert(s) you just revoked?
 
 ### 频率限制
 
- [Staging Environment - Let's Encrypt 官方文档](https://letsencrypt.org/docs/staging-environment/)
+[Staging Environment - Let's Encrypt 官方文档](https://letsencrypt.org/docs/staging-environment/)
 
- Let's Encrypt 为证书申请的频率做了限制，**每个主域名每周不超过20次**。  
- 如果达到这个 **rate limits**，不能够再继续生成了，会报错。
+Let's Encrypt 为证书申请的频率做了限制，**每个主域名每周不超过20次**。  
+如果达到这个 **rate limits**，不能够再继续生成了，会报错。
 
- 所以如果只是为了学习和测试，最好使用 Let's Encrypt 提供的 **Staging Environment（模拟环境）**，没有频率限制。  
- 只要在执行命令时加上 `--staging` 选项就可以了。
+所以如果只是为了学习和测试，最好使用 Let's Encrypt 提供的 **Staging Environment（模拟环境）**，没有频率限制。  
+只要在执行命令时加上 `--staging` 选项就可以了。
  
- 等会用了再玩真的。
+等会用了再玩真的。
 
 ### 关于 HTTPS
 
- 百度 LAVAS 项目中关于 HTTPS 的介绍：[使用 HTTPS](https://lavas.baidu.com/pwa/web-security/web-security-https)，写得挺好的。
-
-## 打个广告
-
-我的其他文章：
- 
-[《polipo/privoxy 实现 Linux 系统全局/自动代理》](https://juejin.im/post/5c91ff5ee51d4534446edb9a)
+百度 LAVAS 项目中关于 HTTPS 的介绍：[使用 HTTPS](https://lavas.baidu.com/pwa/web-security/web-security-https)，写得挺好的。

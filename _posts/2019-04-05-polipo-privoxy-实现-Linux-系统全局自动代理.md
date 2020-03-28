@@ -218,9 +218,3 @@ gfwlist2privoxy -i https://raw.githubusercontent.com/gfwlist/gfwlist/master/gfwl
    很多教程都只添加了 `http_proxy` 一项，但是实际使用中发现也需要设置 `https_proxy`。
 
    另外，关于地址的写法，只写 `127.0.0.1:8123` 时，遇到过有软件不能识别的情况，改为**写完整的地址** `http://127.0.0.1:8123/` 就不会有问题了。
-
-## 参考链接
-
-[Raspberry PI+SS+Polipo 实现科学上网](https://medium.com/@molimowang/raspberry-pi-shadowsocks-polipo实现科学上网-eae1b7eeb779)  
-[Privoxy 教程](https://blog.zfanw.com/privoxy-tutorial/)  
-[使用 Privoxy 实现通用选择性代理功能](http://cckpg.blogspot.com/2011/06/privoxy.html)

@@ -299,10 +299,3 @@ uwsgi :port
 ## 参考链接
 
 参考链接较多，不再一一列出。
-
-## 打个广告
-
-我的其他文章：
-
-[《你的网站还没用上 HTTPS 吗》](https://juejin.im/post/5c910884f265da60f771bdfa)  
-[《polipo/privoxy 实现 Linux 系统全局/自动代理》](https://juejin.im/post/5c91ff5ee51d4534446edb9a)

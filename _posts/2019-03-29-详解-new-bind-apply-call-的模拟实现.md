@@ -399,11 +399,3 @@ var context = arguments[0] || window
 ### 参考链接
 
 [JavaScript 深入之 call 和 apply 的模拟实现](https://github.com/mqyqingfeng/Blog/issues/11)
-
-## 打个广告
-
-我的其他文章：
-
-[《**超详细的**10种排序算法原理及 JS 实现》](https://juejin.im/post/5c9cf808f265da611846c015)  
-[《免费为网站添加 SSL 证书》](https://juejin.im/post/5c910884f265da60f771bdfa)  
-[《深入 JavaScript 常用的8种继承方案》](https://juejin.im/post/5ca38c1551882543eb51fc1a)

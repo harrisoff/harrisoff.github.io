@@ -469,11 +469,3 @@ Me.prototype = m
 me = new Me()
 console.log(me)
 ```
-
-## 打个广告
-
-我的其他文章：
-
-[《**超详细的**10种排序算法原理及 JS 实现》](https://juejin.im/post/5c9cf808f265da611846c015)  
-[《免费为网站添加 SSL 证书》](https://juejin.im/post/5c910884f265da60f771bdfa)  
-[《详解 new/bind/apply/call 的模拟实现》](https://juejin.im/post/5c90b800f265da60ee12d75f)
