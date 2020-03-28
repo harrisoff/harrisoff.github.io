@@ -1,10 +1,10 @@
 window.onload = () => {
   // todo: your client id
-  onedrive_client_id = "";
+  onedrive_client_id = "a8e98bd0-7d39-4b69-84aa-0798b94b0f5d";
   // scopes
   onedrive_scope = "openid https://graph.microsoft.com/Files.ReadWrite.All";
   // todo: redirect URL after logging in
-  onedrive_redirect_url = "";
+  onedrive_redirect_url = "https://harrisoff.github.io/onedrive.html";
   // login url
   onedrive_login_url = `https://login.microsoftonline.com/common/oauth2/v2.0/authorize?client_id=${onedrive_client_id}&response_type=token&redirect_uri=${onedrive_redirect_url}&scope=${onedrive_scope}`;
   // token
