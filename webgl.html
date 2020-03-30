@@ -1,0 +1,1093 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+
+<head>
+  <meta charset="utf-8" />
+  <meta http-equiv="X-UA-Compatible" content="IE=edge,chrome=1" />
+  <title>WEBGL DEMO</title>
+  <meta name="viewport" content="width=device-width,initial-scale=1,minimum-scale=1,maximum-scale=1,user-scalable=no" />
+  <style>
+    #app {
+      overflow: hidden;
+    }
+
+    #canvas {
+      width: 400px;
+      height: 300px;
+    }
+
+    .mask {
+      position: fixed;
+      left: 0;
+      right: 0;
+      top: 0;
+      bottom: 0;
+      background-color: rgba(0, 0, 0, 0.2);
+      z-index: 10;
+      display: none;
+    }
+
+    .modal {
+      width: 400px;
+      position: fixed;
+      left: 50%;
+      top: 50%;
+      transform: translateX(-200px) translateY(-50%);
+      background-color: white;
+      z-index: 15;
+    }
+  </style>
+  <link href="" rel="stylesheet" />
+</head>
+
+<body>
+  <div id="app">
+    <button id="start">START</button>
+    <div class="mask" id="mask">
+      <div class="modal">
+        <canvas id="canvas"></canvas>
+        <span id="translateX"></span>
+        <span id="translateY"></span>
+        <span id="translateZ"></span>
+        <br />
+        <span id="angleX"></span>
+        <span id="angleY"></span>
+        <span id="angleZ"></span>
+        <br />
+        <span id="scaleX"></span>
+        <span id="scaleY"></span>
+        <span id="scaleZ"></span>
+        <button id="exit">EXIT</button>
+      </div>
+    </div>
+    <img src="" id="img" />
+  </div>
+  <script src="./headdata.js"></script>
+  <script src="./base64data.js"></script>
+  <script>
+    // ***** load *****
+    document.getElementById("start").addEventListener("click", function () {
+      document.getElementById("mask").style.display = "block"
+      mount()
+      document.getElementById("exit").addEventListener("click", function () {
+        document.getElementById("mask").style.display = "none"
+        unmount()
+      })
+    })
+    // document.getElementById("img").src = b64
+  </script>
+  <script>
+    // ***** utils *****
+    // matrix utils
+    var m4 = {
+      // private
+      // X/Y canvase 坐标系映射到 clipspace
+      // 这时原点在左上角
+      // 需要修改 X 和 Y 坐标把图形移动到画布中央
+      // 并且 Z 轴会有超出 -1/+1 范围的问题
+      projection: function (width, height, depth) {
+        return [
+          2 / width, 0, 0, 0,
+          0, -2 / height, 0, 0,
+          0, 0, 2 / depth, 0,
+          -1, 1, 0, 1,
+        ]
+      },
+      makeZToWMatrix: function (fudgeFactor) {
+        return [
+          1, 0, 0, 0,
+          0, 1, 0, 0,
+          0, 0, 1, fudgeFactor,
+          0, 0, 0, 1
+        ]
+      },
+      // X/Y/Z cavnas 坐标系创建视锥
+      // 这时原点在观察点（或相机）处
+      // 需要修改 Z 坐标把图形移动到空间中央
+      // 通过修改 near/far 值避免 Z 轴出现 -1/+1 问题
+      perspective: function (fieldOfViewInRadians, aspect, near, far) {
+        // near + fieldOfViewInRadians 映射为 Z 轴的 -1，同时确定一个 near 平面
+        // near 平面的高度可以映射为 Y 轴的 -1 到 +1
+        // near 平面的高度 + aspect 可以印社为 X 轴的 -1 到 +1
+        // far 映射为 Z 轴的 +1
+        var f = Math.tan(Math.PI * 0.5 - 0.5 * fieldOfViewInRadians)
+        var rangeInv = 1.0 / (near - far)
+        return [
+          f / aspect, 0, 0, 0,
+          0, f, 0, 0,
+          0, 0, (near + far) * rangeInv, -1,
+          0, 0, near * far * rangeInv * 2, 0
+        ]
+      },
+      translation: function (tx, ty, tz) {
+        return [
+          1, 0, 0, 0,
+          0, 1, 0, 0,
+          0, 0, 1, 0,
+          tx, ty, tz, 1
+        ]
+      },
+      xRotation: function (angleInRadians) {
+        var c = Math.cos(angleInRadians)
+        var s = Math.sin(angleInRadians)
+        return [
+          1, 0, 0, 0,
+          0, c, s, 0,
+          0, -s, c, 0,
+          0, 0, 0, 1
+        ]
+      },
+      yRotation: function (angleInRadians) {
+        var c = Math.cos(angleInRadians)
+        var s = Math.sin(angleInRadians)
+        return [
+          c, 0, -s, 0,
+          0, 1, 0, 0,
+          s, 0, c, 0,
+          0, 0, 0, 1
+        ]
+      },
+      zRotation: function (angleInRadians) {
+        var c = Math.cos(angleInRadians)
+        var s = Math.sin(angleInRadians)
+        return [
+          c, s, 0, 0,
+          -s, c, 0, 0,
+          0, 0, 1, 0,
+          0, 0, 0, 1
+        ]
+      },
+      scaling: function (sx, sy, sz) {
+        return [
+          sx, 0, 0, 0,
+          0, sy, 0, 0,
+          0, 0, sz, 0,
+          0, 0, 0, 1
+        ]
+      },
+      // public
+      identity: function () {
+        return [
+          1, 0, 0, 0,
+          0, 1, 0, 0,
+          0, 0, 1, 0,
+          0, 0, 0, 1
+        ]
+      },
+      multiply: function (a, b) {
+        var a00 = a[0 * 4 + 0]
+        var a01 = a[0 * 4 + 1]
+        var a02 = a[0 * 4 + 2]
+        var a03 = a[0 * 4 + 3]
+        var a10 = a[1 * 4 + 0]
+        var a11 = a[1 * 4 + 1]
+        var a12 = a[1 * 4 + 2]
+        var a13 = a[1 * 4 + 3]
+        var a20 = a[2 * 4 + 0]
+        var a21 = a[2 * 4 + 1]
+        var a22 = a[2 * 4 + 2]
+        var a23 = a[2 * 4 + 3]
+        var a30 = a[3 * 4 + 0]
+        var a31 = a[3 * 4 + 1]
+        var a32 = a[3 * 4 + 2]
+        var a33 = a[3 * 4 + 3]
+        var b00 = b[0 * 4 + 0]
+        var b01 = b[0 * 4 + 1]
+        var b02 = b[0 * 4 + 2]
+        var b03 = b[0 * 4 + 3]
+        var b10 = b[1 * 4 + 0]
+        var b11 = b[1 * 4 + 1]
+        var b12 = b[1 * 4 + 2]
+        var b13 = b[1 * 4 + 3]
+        var b20 = b[2 * 4 + 0]
+        var b21 = b[2 * 4 + 1]
+        var b22 = b[2 * 4 + 2]
+        var b23 = b[2 * 4 + 3]
+        var b30 = b[3 * 4 + 0]
+        var b31 = b[3 * 4 + 1]
+        var b32 = b[3 * 4 + 2]
+        var b33 = b[3 * 4 + 3]
+        return [
+          b00 * a00 + b01 * a10 + b02 * a20 + b03 * a30,
+          b00 * a01 + b01 * a11 + b02 * a21 + b03 * a31,
+          b00 * a02 + b01 * a12 + b02 * a22 + b03 * a32,
+          b00 * a03 + b01 * a13 + b02 * a23 + b03 * a33,
+          b10 * a00 + b11 * a10 + b12 * a20 + b13 * a30,
+          b10 * a01 + b11 * a11 + b12 * a21 + b13 * a31,
+          b10 * a02 + b11 * a12 + b12 * a22 + b13 * a32,
+          b10 * a03 + b11 * a13 + b12 * a23 + b13 * a33,
+          b20 * a00 + b21 * a10 + b22 * a20 + b23 * a30,
+          b20 * a01 + b21 * a11 + b22 * a21 + b23 * a31,
+          b20 * a02 + b21 * a12 + b22 * a22 + b23 * a32,
+          b20 * a03 + b21 * a13 + b22 * a23 + b23 * a33,
+          b30 * a00 + b31 * a10 + b32 * a20 + b33 * a30,
+          b30 * a01 + b31 * a11 + b32 * a21 + b33 * a31,
+          b30 * a02 + b31 * a12 + b32 * a22 + b33 * a32,
+          b30 * a03 + b31 * a13 + b32 * a23 + b33 * a33
+        ]
+      },
+      translate: function (m, tx, ty, tz) {
+        return m4.multiply(m, m4.translation(tx, ty, tz))
+      },
+      rotateX: function (m, angleInRadians) {
+        return m4.multiply(m, m4.xRotation(angleInRadians))
+      },
+      rotateY: function (m, angleInRadians) {
+        return m4.multiply(m, m4.yRotation(angleInRadians))
+      },
+      rotateZ: function (m, angleInRadians) {
+        return m4.multiply(m, m4.zRotation(angleInRadians))
+      },
+      scale: function (m, sx, sy, sz) {
+        return m4.multiply(m, m4.scaling(sx, sy, sz))
+      },
+      project: function (m, tw, th, td) {
+        return m4.multiply(m, m4.projection(tw, th, td))
+      },
+      makePerspective0: function (m, fudgeFactor) {
+        return m4.multiply(m, m4.makeZToWMatrix(fudgeFactor))
+      },
+      makePerspective: function (m, fieldOfViewInRadians, aspect, near, far) {
+        return m4.multiply(m, m4.perspective(fieldOfViewInRadians, aspect, near, far))
+      }
+    }
+    // webgl utils
+    var webglUtils = {
+      // GLSL
+      setAttribute: function (gl, program, attrName, bufferData, options) {
+        var attrLocation = gl.getAttribLocation(program, attrName)
+        gl.enableVertexAttribArray(attrLocation)
+        var buffer = gl.createBuffer()
+        gl.bindBuffer(gl.ARRAY_BUFFER, buffer)
+        gl.bufferData(gl.ARRAY_BUFFER, bufferData, gl.STATIC_DRAW)
+
+        var normalize = options.normalize || false
+        var size = options.size || 3
+        var type = options.type || gl.FLOAT
+        var stride = options.stride || 0
+        var offset = options.offset || 0
+        gl.vertexAttribPointer(
+          attrLocation,
+          size,
+          type,
+          normalize,
+          stride,
+          offset
+        )
+      },
+      initTexture: function (image) {
+        var texture = gl.createTexture()
+        gl.bindTexture(gl.TEXTURE_2D, texture)
+
+        // 有图片，直接贴
+        if (image) {
+          gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, image)
+        }
+        // 没图片，先填充蓝色
+        else {
+          gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, 1, 1, 0, gl.RGBA, gl.UNSIGNED_BYTE, new Uint8Array([0, 0, 255, 255]))
+        }
+
+        return texture
+      },
+      // canvas
+      initCanvasById: function (id) {
+        var canvas = document.getElementById(id)
+        canvas.width = canvas.clientWidth
+        canvas.height = canvas.clientHeight
+        var gl =
+          canvas.getContext("webgl") ||
+          canvas.getContext("experimental-webgl")
+        return gl
+      },
+      // program
+      initProgram: function (gl, vertexShader, fragmentShader) {
+        // program
+        var shaderProgram = gl.createProgram() // 创建
+        gl.attachShader(shaderProgram, vertexShader) // 指定顶点着色器
+        gl.attachShader(shaderProgram, fragmentShader) // 指定片段着色器
+        gl.linkProgram(shaderProgram) // 链接程序
+        gl.useProgram(shaderProgram) // 使用着色器
+        return shaderProgram
+      },
+      // shader
+      initShader: function (gl, src, type) {
+        var shader = gl.createShader(
+          type === "vertex" ? gl.VERTEX_SHADER : gl.FRAGMENT_SHADER
+        ) // 创建
+        gl.shaderSource(shader, src) // 绑定源码
+        gl.compileShader(shader) // 编译
+        var success = gl.getShaderParameter(shader, gl.COMPILE_STATUS)
+        if (success) {
+          return shader
+        }
+        gl.deleteShader(shader)
+        return null
+      },
+      initVertexShader: function (gl, vertexShaderSrc) {
+        return webglUtils.initShader(gl, vertexShaderSrc, "vertex")
+      },
+      initFragmentShader: function (gl, fragmentShaderSrc) {
+        return webglUtils.initShader(gl, fragmentShaderSrc, "fragment")
+      },
+      // gl.drawArrays
+      drawShape: function (gl, count) {
+        var primitiveType = gl.TRIANGLES
+        var drawOffset = 0
+        gl.drawArrays(primitiveType, drawOffset, count)
+      }
+    }
+    // common utils
+    var utils = {
+      angleToRadian: function (angle) {
+        return ((angle % 360) * Math.PI) / 180
+      },
+      // FIXME: 有时仍然会跨域
+      loadImage: function (src, callback) {
+        var image = new Image()
+        image.src = src
+        // 跨域图片
+        if ((new URL(src)).origin !== window.location.origin) {
+          image.crossOrigin = "anonymous"
+        }
+        image.onload = function () {
+          console.log(image)
+          callback(image)
+        }
+      },
+      // 是否 2 的整数幂
+      isPowerOf2: function (value) {
+        return value && (value & (value - 1)) === 0
+      }
+    }
+    // log
+    var logger = {
+      log: function (content) {
+        // document.getElementById('log').innerText = document.getElementById('log').innerText + content
+      },
+      error: function (content) {
+        // document.getElementById('error').innerText = document.getElementById('error').innerText + content
+      },
+      updateById: function (id, data) {
+        var value = data[id].toFixed(2)
+        if (id === 'angleX' || id === 'angleY' || id === 'angleZ') {
+          var subValue = (value % 360).toFixed(2)
+          value += '(' + subValue + ')'
+        }
+        var oldText = document.getElementById(id).innerText
+        var newText = id + ': ' + value
+        if (oldText !== newText) document.getElementById(id).innerText = id + ': ' + value
+      },
+      updateAll: function (ids, data) {
+        for (var index = 0; index < ids.length; index += 1) {
+          var id = ids[index]
+          logger.updateById(id, data)
+        }
+      }
+    }
+    // shape generator
+    var shapeUtils = {
+      // 获取正方体的顶点坐标、中心旋转所需偏移量、透视投影数据
+      getCube: function (size, options) {
+        options = options || {}
+        return {
+          vertex: [
+            // top
+            0, size, 0,
+            0, size, size,
+            size, size, 0,
+            size, size, 0,
+            0, size, size,
+            size, size, size,
+            // bottom
+            0, 0, size,
+            0, 0, 0,
+            size, 0, size,
+            size, 0, size,
+            0, 0, 0,
+            size, 0, 0,
+            // front
+            0, size, size,
+            0, 0, size,
+            size, size, size,
+            size, size, size,
+            0, 0, size,
+            size, 0, size,
+            // back
+            size, size, 0,
+            size, 0, 0,
+            0, size, 0,
+            0, size, 0,
+            size, 0, 0,
+            0, 0, 0,
+            // left - see from camera
+            0, size, 0,
+            0, 0, 0,
+            0, size, size,
+            0, size, size,
+            0, 0, 0,
+            0, 0, size,
+            // right
+            size, size, size,
+            size, 0, size,
+            size, size, 0,
+            size, size, 0,
+            size, 0, size,
+            size, 0, 0,
+          ],
+          origin: [-size / 2, -size / 2, -size / 2],
+          perspective: {
+            near: options.near || 1,
+            far: options.far || 500,
+            viewAngle: options.viewAngle || 60
+          },
+        }
+      },
+    }
+    // texture coordinates generator
+    textureUtils = {
+      // 获取一个面的 texture coordinates，有 4 种方向
+      getOne: function (p, order) {
+        var positiveOrder = [
+          0, 0,
+          0, p,
+          p, 0,
+          p, 0,
+          0, p,
+          p, p,
+        ]
+        var negativeOrder = [
+          p, p,
+          p, 0,
+          0, p,
+          0, p,
+          p, 0,
+          0, 0,
+        ]
+        var leftOrder = [
+          p, 0,
+          0, 0,
+          p, p,
+          p, p,
+          0, 0,
+          0, p,
+        ]
+        var rightOrder = [
+          0, p,
+          p, p,
+          0, 0,
+          0, 0,
+          p, p,
+          p, 0,
+        ]
+        switch (order) {
+          case 'positive':
+            return positiveOrder
+          case 'negative':
+            return negativeOrder
+          case 'left':
+            return leftOrder
+          case 'right':
+            return positiveOrder
+          default:
+            return positiveOrder
+        }
+      },
+      // 获取一个六面体的 texture coordinates
+      getCube: function (percentage, order) {
+        var textureData = []
+        for (var index = 0; index < 6; index += 1) {
+          textureData = textureData.concat(textureUtils.getOne(percentage, order))
+        }
+        return textureData
+      }
+    }
+    // color generator
+    var colorUtils = {
+      cube: [
+        // top
+        255, 0, 0,
+        255, 0, 0,
+        255, 0, 0,
+        255, 0, 0,
+        255, 0, 0,
+        255, 0, 0,
+        // bottom
+        0, 255, 0,
+        0, 255, 0,
+        0, 255, 0,
+        0, 255, 0,
+        0, 255, 0,
+        0, 255, 0,
+        // back
+        0, 0, 255,
+        0, 0, 255,
+        0, 0, 255,
+        0, 0, 255,
+        0, 0, 255,
+        0, 0, 255,
+        // front
+        0, 255, 255,
+        0, 255, 255,
+        0, 255, 255,
+        0, 255, 255,
+        0, 255, 255,
+        0, 255, 255,
+        // left/right
+        255, 255, 0,
+        255, 255, 0,
+        255, 255, 0,
+        255, 255, 0,
+        255, 255, 0,
+        255, 255, 0,
+        // left/right
+        255, 0, 255,
+        255, 0, 255,
+        255, 0, 255,
+        255, 0, 255,
+        255, 0, 255,
+        255, 0, 255,
+      ]
+    }
+
+    // ***** test case *****
+    var cubeData = shapeUtils.getCube(100)
+    var cubeTexture = textureUtils.getCube(1)
+    var cubeColor = colorUtils.cube
+    var datasets = {
+      // 正方体
+      cube: {
+        // 顶点坐标
+        vertex: cubeData.vertex,
+        // 顶点颜色
+        color: cubeColor,
+        // 纹理
+        // 暂且每个面都写成一样的（指方向
+        textureCoord: cubeTexture,
+        // 中心旋转
+        origin: cubeData.origin,
+        // 初始位置
+        translation: [0, 0, 0],
+        rotation: [20, 0, 0], // 值为角度，不是弧度
+        scaling: [1, 1, 1],
+        // 透视投影
+        perspective: cubeData.perspective,
+        // 其它选项
+        options: {
+        }
+      },
+      // F
+      f: {
+        vertex: [
+          // left column front
+          0, 0, 0,
+          0, 150, 0,
+          30, 0, 0,
+          30, 0, 0,
+          0, 150, 0,
+          30, 150, 0,
+          // top rung front
+          30, 0, 0,
+          30, 30, 0,
+          100, 0, 0,
+          100, 0, 0,
+          30, 30, 0,
+          100, 30, 0,
+          // middle rung front
+          30, 60, 0,
+          30, 90, 0,
+          67, 60, 0,
+          67, 60, 0,
+          30, 90, 0,
+          67, 90, 0,
+          // left column back
+          0, 0, 30,
+          30, 0, 30,
+          0, 150, 30,
+          0, 150, 30,
+          30, 0, 30,
+          30, 150, 30,
+          // top rung back
+          30, 0, 30,
+          100, 0, 30,
+          30, 30, 30,
+          30, 30, 30,
+          100, 0, 30,
+          100, 30, 30,
+          // middle rung back
+          30, 60, 30,
+          67, 60, 30,
+          30, 90, 30,
+          30, 90, 30,
+          67, 60, 30,
+          67, 90, 30,
+          // top
+          0, 0, 0,
+          100, 0, 0,
+          100, 0, 30,
+          0, 0, 0,
+          100, 0, 30,
+          0, 0, 30,
+          // top rung right
+          100, 0, 0,
+          100, 30, 0,
+          100, 30, 30,
+          100, 0, 0,
+          100, 30, 30,
+          100, 0, 30,
+          // under top rung
+          30, 30, 30,
+          100, 30, 30,
+          30, 30, 0,
+          30, 30, 0,
+          100, 30, 30,
+          100, 30, 0,
+          // between top rung and middle
+          30, 30, 0,
+          30, 60, 30,
+          30, 30, 30,
+          30, 60, 30,
+          30, 30, 0,
+          30, 60, 0,
+          // top of middle rung
+          30, 60, 0,
+          67, 60, 30,
+          30, 60, 30,
+          67, 60, 30,
+          30, 60, 0,
+          67, 60, 0,
+          // right of middle rung
+          67, 60, 0,
+          67, 90, 30,
+          67, 60, 30,
+          67, 90, 30,
+          67, 60, 0,
+          67, 90, 0,
+          // bottom of middle rung
+          30, 90, 0,
+          30, 90, 30,
+          67, 90, 30,
+          30, 90, 0,
+          67, 90, 30,
+          67, 90, 0,
+          // right of bottom
+          30, 90, 0,
+          30, 150, 30,
+          30, 90, 30,
+          30, 150, 30,
+          30, 90, 0,
+          30, 150, 0,
+          // bottom
+          0, 150, 0,
+          0, 150, 30,
+          30, 150, 30,
+          0, 150, 0,
+          30, 150, 30,
+          30, 150, 0,
+          // left side
+          0, 0, 0,
+          0, 0, 30,
+          0, 150, 30,
+          0, 0, 0,
+          0, 150, 30,
+          0, 150, 0
+        ],
+        color: [
+          // left column front
+          200, 70, 120,
+          200, 70, 120,
+          200, 70, 120,
+          200, 70, 120,
+          200, 70, 120,
+          200, 70, 120,
+          // top rung front
+          200, 70, 120,
+          200, 70, 120,
+          200, 70, 120,
+          200, 70, 120,
+          200, 70, 120,
+          200, 70, 120,
+          // middle rung front
+          200, 70, 120,
+          200, 70, 120,
+          200, 70, 120,
+          200, 70, 120,
+          200, 70, 120,
+          200, 70, 120,
+          // left column back
+          80, 70, 200,
+          80, 70, 200,
+          80, 70, 200,
+          80, 70, 200,
+          80, 70, 200,
+          80, 70, 200,
+          // top rung back
+          80, 70, 200,
+          80, 70, 200,
+          80, 70, 200,
+          80, 70, 200,
+          80, 70, 200,
+          80, 70, 200,
+          // middle rung back
+          80, 70, 200,
+          80, 70, 200,
+          80, 70, 200,
+          80, 70, 200,
+          80, 70, 200,
+          80, 70, 200,
+          // top
+          70, 200, 210,
+          70, 200, 210,
+          70, 200, 210,
+          70, 200, 210,
+          70, 200, 210,
+          70, 200, 210,
+          // top rung right
+          200, 200, 70,
+          200, 200, 70,
+          200, 200, 70,
+          200, 200, 70,
+          200, 200, 70,
+          200, 200, 70,
+          // under top rung
+          210, 100, 70,
+          210, 100, 70,
+          210, 100, 70,
+          210, 100, 70,
+          210, 100, 70,
+          210, 100, 70,
+          // between top rung and middle
+          210, 160, 70,
+          210, 160, 70,
+          210, 160, 70,
+          210, 160, 70,
+          210, 160, 70,
+          210, 160, 70,
+          // top of middle rung
+          70, 180, 210,
+          70, 180, 210,
+          70, 180, 210,
+          70, 180, 210,
+          70, 180, 210,
+          70, 180, 210,
+          // right of middle rung
+          100, 70, 210,
+          100, 70, 210,
+          100, 70, 210,
+          100, 70, 210,
+          100, 70, 210,
+          100, 70, 210,
+          // bottom of middle rung.
+          76, 210, 100,
+          76, 210, 100,
+          76, 210, 100,
+          76, 210, 100,
+          76, 210, 100,
+          76, 210, 100,
+          // right of bottom
+          140, 210, 80,
+          140, 210, 80,
+          140, 210, 80,
+          140, 210, 80,
+          140, 210, 80,
+          140, 210, 80,
+          // bottom
+          90, 130, 110,
+          90, 130, 110,
+          90, 130, 110,
+          90, 130, 110,
+          90, 130, 110,
+          90, 130, 110,
+          // left side
+          160, 160, 220,
+          160, 160, 220,
+          160, 160, 220,
+          160, 160, 220,
+          160, 160, 220,
+          160, 160, 220
+        ],
+        origin: [-50, -75, -15],
+        translation: [0, 0, 0],
+        rotation: [190, 40, 0],
+        scaling: [1, 1, 1],
+        perspective: {
+          near: 1,
+          far: 500,
+          viewAngle: 60
+        },
+        options: {}
+      },
+      // head
+      head: {
+        vertex: HeadData.positions,
+        normals: HeadData.normals, // 法向量
+        color: [],
+        origin: [0, 0, 0],
+        translation: [0, 0, 0],
+        rotation: [0, 40, 0],
+        scaling: [1, 1, 1],
+        perspective: {
+          near: 1,
+          far: 50,
+          viewAngle: 60
+        },
+        options: {}
+      }
+    }
+
+    // ***** core ******
+    // var vertexShaderSrc0 = `
+    //   attribute vec2 a_texcoord;
+    //   attribute vec4 a_position;
+    //   uniform mat4 u_matrix;
+    //   varying vec2 v_texcoord;
+    //   void main() {
+    //     gl_Position = u_matrix * a_position;
+    //     v_texcoord = a_texcoord;
+    //   }
+    //   `;
+    // var fragmentShaderSrc0 = `
+    //   precision mediump float;
+    //   varying vec2 v_texcoord;
+    //   uniform sampler2D u_texture;
+    //   void main() {
+    //     gl_FragColor = texture2D(u_texture, v_texcoord);
+    //   }
+    //   `;
+    var vertexShaderSrc = 'attribute vec2 a_texcoord; attribute vec4 a_position; uniform mat4 u_matrix; varying vec2 v_texcoord; void main() { gl_Position = u_matrix * a_position; v_texcoord = a_texcoord; }'
+    var fragmentShaderSrc = 'precision mediump float; varying vec2 v_texcoord; uniform sampler2D u_texture; void main() { gl_FragColor = texture2D(u_texture, v_texcoord); }'
+
+    // canvas
+    var gl, shaderProgram, count, texture
+    // canvas data
+    var drawData = {}
+    var drawOptions, drawOrigin
+    var fudgeFactor = 0.4
+    // operations
+    var prevMousePos = {
+      x: 0,
+      y: 0
+    }
+    var isMouseDown = false
+    var sensitivity = 1.5
+
+    function main(dataset) {
+      // canvas
+      gl = webglUtils.initCanvasById("canvas")
+      // shaders
+      var vertexShader = webglUtils.initVertexShader(gl, vertexShaderSrc)
+      var fragmentShader = webglUtils.initFragmentShader(
+        gl,
+        fragmentShaderSrc
+      )
+      // program
+      shaderProgram = webglUtils.initProgram(
+        gl,
+        vertexShader,
+        fragmentShader
+      )
+
+      gl.viewport(0, 0, gl.canvas.clientWidth, gl.canvas.clientHeight)
+
+      var positionData = dataset.vertex
+      count = positionData.length / 3
+
+      // 数据初始化
+      initDrawData()
+
+      // position
+      var positionOptions = {
+        type: gl.FLOAT // 坐标是浮点型，虽然这里写的全都是整数
+      }
+      webglUtils.setAttribute(
+        gl,
+        shaderProgram,
+        "a_position",
+        new Float32Array(positionData),
+        positionOptions
+      )
+
+      // texture
+      texture = webglUtils.initTexture()
+      // texture coordinates
+      var textureCoordOptions = {
+        size: 2
+      }
+      webglUtils.setAttribute(
+        gl,
+        shaderProgram,
+        'a_texcoord',
+        new Float32Array(drawData.textureCoord),
+        textureCoordOptions
+      )
+
+      // url
+      var url
+      // ?
+      // url = 'https://cdn.glitch.com/4c9ebeb9-8b9a-4adc-ad0a-238d9ae00bb5%2Fmdn_logo-only_color.svg'
+      // F
+      url = 'https://webglfundamentals.org/webgl/resources/f-texture.png'
+      // 非 2 整数幂尺寸的图片
+      // url = 'https://webglfundamentals.org/webgl/resources/keyboard.jpg'
+
+      utils.loadImage(url, function (image) {
+        gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, image)
+        if (utils.isPowerOf2(image.width) && utils.isPowerOf2(image.height)) {
+          gl.generateMipmap(gl.TEXTURE_2D)
+        } else {
+          gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE)
+          gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE)
+          gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR)
+        }
+        draw()
+      })
+
+      draw()
+    }
+
+    function draw() {
+      // 0. 单位矩阵
+      var matrix = m4.identity()
+      // 1. 透视投影 + 坐标系转换
+      var zNear = drawData.near
+      var zFar = drawData.far
+      var viewAngle = drawData.viewAngle
+      var fieldRadian = utils.angleToRadian(viewAngle)
+      var aspect = gl.canvas.clientWidth / gl.canvas.clientHeight
+      matrix = m4.makePerspective(matrix, fieldRadian, aspect, zNear, zFar)
+      // 2. 放置到 Z 轴中央
+      var zMiddle = (zNear - zFar) / 2
+      matrix = m4.translate(matrix, 0, 0, zMiddle)
+      // 3. 三维变换
+      matrix = m4.translate(
+        matrix,
+        drawData.translateX || 0,
+        drawData.translateY || 0,
+        drawData.translateZ || 0
+      )
+      matrix = m4.rotateX(
+        matrix,
+        utils.angleToRadian(drawData.angleX || 0)
+      )
+      matrix = m4.rotateY(
+        matrix,
+        utils.angleToRadian(drawData.angleY || 0)
+      )
+      matrix = m4.rotateZ(
+        matrix,
+        utils.angleToRadian(drawData.angleZ || 0)
+      )
+      matrix = m4.scale(
+        matrix,
+        drawData.scaleX || 1,
+        drawData.scaleY || 1,
+        drawData.scaleZ || 1
+      )
+      // 4. 中心旋转
+      matrix = m4.translate(
+        matrix,
+        drawOrigin[0],
+        drawOrigin[1],
+        drawOrigin[2]
+      )
+
+      // set matrix
+      var matrixLocation = gl.getUniformLocation(shaderProgram, "u_matrix")
+      gl.uniformMatrix4fv(matrixLocation, false, matrix)
+
+      gl.clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT)
+      gl.enable(gl.CULL_FACE)
+      gl.enable(gl.DEPTH_TEST)
+      webglUtils.drawShape(gl, count)
+
+      // logs
+      var ids = [
+        'translateX',
+        'translateY',
+        'translateZ',
+        'angleX',
+        'angleY',
+        'angleZ',
+        'scaleX',
+        'scaleY',
+        'scaleZ',
+      ]
+      logger.updateAll(ids, drawData)
+    }
+
+    function initDrawData() {
+      var translationData = dataset.translation
+      var rotationData = dataset.rotation
+      var scalingData = dataset.scaling
+      var perspectiveData = dataset.perspective
+      var textureCoordData = dataset.textureCoord
+
+      // 三维变换
+      drawData.translateX = translationData[0] || 0
+      drawData.translateY = translationData[1] || 0
+      drawData.translateZ = translationData[2] || 0
+      drawData.angleX = rotationData[0] || 0
+      drawData.angleY = rotationData[1] || 0
+      drawData.angleZ = rotationData[2] || 0
+      drawData.scaleX = scalingData[0] || 1
+      drawData.scaleY = scalingData[1] || 1
+      drawData.scaleZ = scalingData[2] || 1
+      // 透视投影
+      drawData.near = perspectiveData.near || 1
+      drawData.far = perspectiveData.far || 1000
+      drawData.viewAngle = perspectiveData.viewAngle || 60
+      // 纹理
+      drawData.textureCoord = textureCoordData || []
+      // 中心旋转
+      drawOrigin = dataset.origin
+      // 其他
+      drawOptions = dataset.options || {}
+    }
+
+    // ***** event handlers *****
+    var dataset = datasets.cube
+    // initialize
+    function mount() {
+      window.addEventListener("mousedown", onMouseDown)
+      window.addEventListener("mousemove", onMouseMove)
+      window.addEventListener("mouseup", onMouseUp)
+      document.addEventListener("touchstart", onMouseDown)
+      document.addEventListener("touchmove", onMouseMove)
+      document.addEventListener("touchend", onMouseUp)
+      main(dataset)
+    }
+    function unmount() {
+      window.removeEventListener("mousedown", onMouseDown)
+      window.removeEventListener("mousemove", onMouseMove)
+      window.removeEventListener("mouseup", onMouseUp)
+      document.removeEventListener("touchstart", onMouseDown)
+      document.removeEventListener("touchmove", onMouseMove)
+      document.removeEventListener("touchend", onMouseUp)
+    }
+    // mouse events
+    function onMouseDown(event) {
+      if (event.target.tagName.toUpperCase() === "CANVAS") {
+        isMouseDown = true
+        prevMousePos.x = event.screenX || event.touches[0].screenX
+        prevMousePos.y = event.screenY || event.touches[0].screenY
+      }
+    }
+    function onMouseMove(event) {
+      if (!isMouseDown) return
+      var screenX = event.screenX || event.touches[0].screenX
+      var screenY = event.screenY || event.touches[0].screenY
+      var diffX = screenX - prevMousePos.x
+      var diffY = screenY - prevMousePos.y
+      prevMousePos.x = screenX
+      prevMousePos.y = screenY
+      drawData.angleX += diffY * sensitivity
+      drawData.angleY += diffX * sensitivity
+      draw()
+    }
+    function onMouseUp(event) {
+      isMouseDown = false
+    }
+  </script>
+</body>
+
+</html>
