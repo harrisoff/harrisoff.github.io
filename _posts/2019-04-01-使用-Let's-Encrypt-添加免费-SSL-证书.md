@@ -6,9 +6,25 @@ categories: devops linux
 ---
 ## 前前言
 
-本文没有提及泛域名证书，内容已经略显过时并且缺乏实用性，仅供学习参考。
+正文没有提及泛域名证书，内容已经略显过时并且缺乏实用性，仅供学习参考。
 
 实际需求请使用泛域名证书。
+
+关于泛域名证书，简单做个笔记。
+
+首先安装 certbot-auto，然后执行：
+
+```bash
+certbot-auto certonly -d *.example.com --manual --preferred-challenges dns-01 --server https://acme-v02.api.letsencrypt.org/directory --no-self-upgrade
+```
+
+certbot-auto 默认会首先更新一下自己的版本，在阿里云上有无法正常更新的问题，所以设置 `--no-self-upgrade` 阻止更新，直接使用旧版本。
+
+这是使用 dns-plugin 的申请方式，执行命令后，会生成一个字符串，并要求添加为 \_acme-challenge.example.com 的 TXT 记录，通过这个记录来验证域名归属。
+
+证书有效期也是 90 天。
+
+证书续期的流程也跟上面一样，执行命令获取新的字符串，更新 TXT 记录。GitHub 上有很多自动化脚本简化这个过程。
 
 ## 前言
 
