@@ -35,7 +35,7 @@ function downloadMenu(bookTitle, sections, introductionHtml) {
 <ul>
 `;
   sections.forEach(({ sectionTitle }, index) => {
-    menuHtml += `<li><a href="./${index + 1} ${sectionTitle}.html">${sectionTitle}</a></li>`;
+    menuHtml += `<li><a href="${genFilename(bookTitle, sectionTitle, index + 1)}">${sectionTitle}</a></li>`;
   });
   menuHtml += '</ul>';
   const html = genHtml('目录', menuHtml);
@@ -134,8 +134,8 @@ function download(filename, html) {
 }
 
 function runTask(tasks) {
-  tasks.forEach((task) => {
-    setTimeout(task, 2000);
+  tasks.forEach((task, index) => {
+    setTimeout(task, 2000 * index);
   });
 }
 
