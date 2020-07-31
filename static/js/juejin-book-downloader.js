@@ -26,7 +26,7 @@ async function main() {
   downloadTasks.unshift(() => {
     downloadMenu(bookTitle, sections, introductionHtml);
   });
-  runTask(downloadTasks.slice(0, 2));
+  runTask(downloadTasks);
 }
 
 function downloadMenu(bookTitle, sections, introductionHtml) {
