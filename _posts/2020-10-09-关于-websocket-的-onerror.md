@@ -9,7 +9,7 @@ categories: websocket js
 
 即 `onerror` 触发时，只能知道出错了，没法知道到底什么错。要想处理错误，只能再配合其他方式。
 
-继续看规范，唯一可能触发 `onerror` 的时机是在 `onclose` 之前。原文是：
+继续看规范可以发现，触发 `onerror` 的情况有很多，但是大多是 exeption，而我们需要的那个 Error Event 只有一种情况下会触发，那就是在 `onclose` 之前。原文是：
 
 > When the WebSocket connection is closed, possibly cleanly, the user agent must queue a task to run the following substeps:
 >
@@ -19,7 +19,9 @@ categories: websocket js
 >
 > 3. Create an event that uses the CloseEvent interface, with the event type close, ...
 
-`onerror` 一定会紧接着 `onclose`，并且由于 `onclose` 的 `event` 允许设置自定义 `code`，可以通过这种方式处理错误。
+就是第二条里的这个 **simple event named error**。
+
+这时，`onerror` 一定会紧接着 `onclose`，并且由于 `onclose` 的 `event` 允许设置自定义 `code`，可以通过这种方式处理错误。
 
 但是！规范这种东西...我们知道浏览器经常不会严格按照规范实现，对于 websocket，我也不知道是不是完全按照规范实现的。不过从目前测试来看，应该没啥问题...
 
