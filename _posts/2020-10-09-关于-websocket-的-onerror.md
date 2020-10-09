@@ -1,0 +1,35 @@
+---
+layout: post
+title: "关于 websocket 的 onerror"
+date: 2020-10-09 00:00:00
+categories: websocket js
+---
+
+`onerror` 本身基本没卵用。一个重要原因是规范里有这么一个规定，**在某些条件下**不允许 `onerror` 的 `event` 携带说明原因的信息。虽然有条件限制，但是条件实在太多了，大部分情况都覆盖了。
+
+即 `onerror` 触发时，只能知道出错了，没法知道到底什么错。要想处理错误，只能再配合其他方式。
+
+继续看规范，唯一可能触发 `onerror` 的时机是在 `onclose` 之前。原文是：
+
+> When the WebSocket connection is closed, possibly cleanly, the user agent must queue a task to run the following substeps:
+>
+> 1. Change the readyState attribute's value to CLOSED (3).
+>
+> 2. If the user agent was required to fail the WebSocket connection or the WebSocket connection is closed with prejudice, fire a simple event named error at the WebSocket object. [WSP]
+>
+> 3. Create an event that uses the CloseEvent interface, with the event type close, ...
+
+`onerror` 一定会紧接着 `onclose`，并且由于 `onclose` 的 `event` 允许设置自定义 `code`，可以通过这种方式处理错误。
+
+但是！规范这种东西...我们知道浏览器经常不会严格按照规范实现，对于 websocket，我也不知道是不是完全按照规范实现的。不过从目前测试来看，应该没啥问题...
+
+> 出了问题别找我...
+
+一些想当然会触发 `onerror` 的情况实际上并不会发生，比如连接断开后再调用 `send()`。
+
+对于这种情况，只能提前在 `onclose` 中做处理，阻止 `send()`，或 `send()` 之前判断一下 `readyState`。
+
+## 参考
+
+- [How to read status code from rejected WebSocket opening handshake with JavaScript? - StackOverflow](https://stackoverflow.com/questions/21762596/how-to-read-status-code-from-rejected-websocket-opening-handshake-with-javascrip/50685387)
+- [w3 规范](https://www.w3.org/TR/websockets)
