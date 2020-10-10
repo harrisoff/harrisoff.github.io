@@ -23,7 +23,9 @@ categories: websocket js
 
 就是第二条里的这个 **simple event named error**。
 
-这时，`onerror` 一定会紧接着 `onclose`，并且由于 `onclose` 的 `event` 允许设置自定义 `code`，可以在这里对 error 做比较详细的处理。
+这时，`onerror` 一定会紧接着 `onclose`，并且由于 `onclose` 的 `event` 允许设置自定义 `code`，可以在这里对 `error` 做比较详细的处理。
+
+不过话又说回来了，如果只是做一些粗略的判断还是可以的，毕竟至少可以在 `onerror` 中区分发生的是 exception 还是 error event。
 
 但是！规范这种东西...我们知道浏览器经常不会严格按照规范实现，对于 websocket，我也不知道是不是完全按照规范实现的。不过从目前测试来看，应该没啥问题...
 
