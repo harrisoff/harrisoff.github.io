@@ -4,6 +4,16 @@ title: "使用 Let's Encrypt 添加免费 SSL 证书"
 date: 2019-04-01 00:00:00
 categories: devops linux
 ---
+
+## 前前前言
+
+请使用 [acme.sh](https://github.com/acmesh-official/acme.sh)
+
+参考链接：
+
+- [【阿里云】acme.sh 配合 letsencrypt 配置泛域名](https://juejin.cn/post/6844903651308371981)
+- [根证书、服务器证书、用户证书的区别](https://www.nginx.cn/5559.html)
+
 ## 前前言
 
 正文没有提及泛域名证书，内容已经略显过时并且缺乏实用性，仅供学习参考。
