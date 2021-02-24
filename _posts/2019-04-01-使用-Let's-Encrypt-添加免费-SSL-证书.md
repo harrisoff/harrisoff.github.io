@@ -14,6 +14,22 @@ categories: devops linux
 - [【阿里云】acme.sh 配合 letsencrypt 配置泛域名](https://juejin.cn/post/6844903651308371981)
 - [根证书、服务器证书、用户证书的区别](https://www.nginx.cn/5559.html)
 
+### 证书更新
+
+都说 acme.sh 会自动添加 cron 任务更新证书。有这个任务是不假：
+
+```bash
+17 0 * * * "/root/.acme.sh"/acme.sh --cron --home "/root/.acme.sh" > /dev/null
+```
+
+但是实际运行的时候出错了，关键错误信息是 `Skip invalid cert for: *.domain.com`。可以添加 `--debug` 参数查看更多日志，不过并没有什么卵用。
+
+最后采用手动更新：
+
+```bash
+acme.sh --renew --domain *.domain.com
+```
+
 ## 前前言
 
 正文没有提及泛域名证书，内容已经略显过时并且缺乏实用性，仅供学习参考。
